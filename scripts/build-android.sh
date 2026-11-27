@@ -75,6 +75,8 @@ qt_arch_for_abi() {
     esac
 }
 
+qt_toolchain() { echo "$QT_ROOT/$QT_VERSION/$1/lib/cmake/Qt6/qt.toolchain.cmake"; }
+
 # ------------------------------------------------------------------ args ---
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -151,7 +153,7 @@ install_qt() {
     local need=0 abi arch
     for abi in "${ABI_LIST[@]}"; do
         arch="$(qt_arch_for_abi "$abi")"
-        [[ -x "$QT_ROOT/$QT_VERSION/$arch/bin/qt-cmake" ]] || need=1
+        [[ -f "$(qt_toolchain "$arch")" ]] || need=1
     done
     [[ -x "$QT_ROOT/$QT_VERSION/gcc_64/bin/qmake" ]] || need=1
     [[ $need -eq 0 ]] && { log "Qt $QT_VERSION already installed in $QT_ROOT"; return; }
@@ -171,7 +173,7 @@ install_qt() {
 
     for abi in "${ABI_LIST[@]}"; do
         arch="$(qt_arch_for_abi "$abi")"
-        [[ -x "$QT_ROOT/$QT_VERSION/$arch/bin/qt-cmake" ]] && continue
+        [[ -f "$(qt_toolchain "$arch")" ]] && continue
         log "Installing Qt $QT_VERSION for $arch"
         # Qt >= 6.7 publishes Android under "all_os"; older under "linux".
         "$AQT_VENV/bin/aqt" install-qt -O "$QT_ROOT" all_os android "$QT_VERSION" "$arch" \
@@ -233,13 +235,16 @@ install_android_openssl() {
 
 # ----------------------------------------------------------------- build ---
 build() {
-    local qt_cmake="$QT_ROOT/$QT_VERSION/$PRIMARY_ARCH/bin/qt-cmake"
-    [[ -x "$qt_cmake" ]] || die "qt-cmake not found: $qt_cmake"
+    # Use the toolchain file directly rather than bin/qt-cmake: aqtinstall
+    # only marks qt-cmake executable for the first Android arch it installs.
+    local toolchain; toolchain="$(qt_toolchain "$PRIMARY_ARCH")"
+    [[ -f "$toolchain" ]] || die "Qt toolchain file not found: $toolchain"
 
     [[ $CLEAN -eq 1 ]] && { log "Cleaning $BUILD_DIR"; rm -rf "$BUILD_DIR"; }
 
     local cmake_args=(
         -S "$SRC_DIR" -B "$BUILD_DIR" -G Ninja
+        -DCMAKE_TOOLCHAIN_FILE="$toolchain"
         -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
         -DQT_HOST_PATH="$QT_ROOT/$QT_VERSION/gcc_64"
         -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT"
@@ -264,7 +269,7 @@ build() {
     fi
 
     log "Configuring ($BUILD_TYPE, ABIs: $ABIS)"
-    "$qt_cmake" "${cmake_args[@]}"
+    cmake "${cmake_args[@]}"
 
     log "Building $PACKAGE"
     cmake --build "$BUILD_DIR" --parallel "$JOBS" --target "$PACKAGE"
@@ -274,14 +279,16 @@ build() {
     local suffix; suffix="$(tr '[:upper:]' '[:lower:]' <<< "$BUILD_TYPE")"
     [[ $BUILD_TYPE == Release && $signed -eq 0 ]] && suffix+="-unsigned"
 
-    local found=0 f
-    while IFS= read -r -d '' f; do
-        local dest="$DIST_DIR/DroidStar-${rev}-${suffix}.${PACKAGE}"
-        cp -f "$f" "$dest"
-        log "Output: $dest"
-        found=1
-    done < <(find "$BUILD_DIR" -path '*/build/outputs/*' -name "*.${PACKAGE}" -newer "$BUILD_DIR/CMakeCache.txt" -print0)
-    [[ $found -eq 1 ]] || die "no .$PACKAGE produced under $BUILD_DIR"
+    # Gradle writes outputs/{apk,bundle}/<variant>/; Qt's aab target builds
+    # both variants, so match on the variant directory.
+    local variant; variant="$(tr '[:upper:]' '[:lower:]' <<< "$BUILD_TYPE")"
+    local f
+    f="$(find "$BUILD_DIR" -path "*/build/outputs/*/${variant}/*.${PACKAGE}" \
+            -newer "$BUILD_DIR/CMakeCache.txt" -printf '%T@ %p\n' | sort -n | tail -1 | cut -d' ' -f2-)"
+    [[ -n "$f" ]] || die "no ${variant} .$PACKAGE produced under $BUILD_DIR"
+    local dest="$DIST_DIR/DroidStar-${rev}-${suffix}.${PACKAGE}"
+    cp -f "$f" "$dest"
+    log "Output: $dest"
 }
 
 # ------------------------------------------------------------------ main ---
