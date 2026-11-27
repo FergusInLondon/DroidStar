@@ -268,6 +268,9 @@ build() {
         warn "No keystore configured: release package will be unsigned"
     fi
 
+    # Also exported: Qt's per-ABI sub-builds only see the environment.
+    export ANDROID_OPENSSL_ROOT="$ANDROID_OPENSSL_DIR"
+
     log "Configuring ($BUILD_TYPE, ABIs: $ABIS)"
     cmake "${cmake_args[@]}"
 

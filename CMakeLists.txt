@@ -200,7 +200,14 @@ endif()
 
 if(ANDROID)
     target_link_libraries(DroidStar PRIVATE Qt6::CorePrivate)
-    set(ANDROID_OPENSSL_ROOT "$ENV{HOME}/Android/Sdk/android_openssl" CACHE PATH "Path to KDAB android_openssl checkout")
+    # Default from the environment: Qt's multi-ABI sub-builds don't forward
+    # custom cache variables, but do inherit the environment.
+    if(DEFINED ENV{ANDROID_OPENSSL_ROOT})
+        set(_openssl_default "$ENV{ANDROID_OPENSSL_ROOT}")
+    else()
+        set(_openssl_default "$ENV{HOME}/Android/Sdk/android_openssl")
+    endif()
+    set(ANDROID_OPENSSL_ROOT "${_openssl_default}" CACHE PATH "Path to KDAB android_openssl checkout")
     include(${ANDROID_OPENSSL_ROOT}/android_openssl.cmake)
     add_android_openssl_libraries(DroidStar)
     target_sources(DroidStar PUBLIC
