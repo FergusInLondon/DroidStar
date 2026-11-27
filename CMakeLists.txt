@@ -200,7 +200,8 @@ endif()
 
 if(ANDROID)
     target_link_libraries(DroidStar PRIVATE Qt6::CorePrivate)
-    include(~/Android/Sdk/android_openssl/android_openssl.cmake)
+    set(ANDROID_OPENSSL_ROOT "$ENV{HOME}/Android/Sdk/android_openssl" CACHE PATH "Path to KDAB android_openssl checkout")
+    include(${ANDROID_OPENSSL_ROOT}/android_openssl.cmake)
     add_android_openssl_libraries(DroidStar)
     target_sources(DroidStar PUBLIC
         androidserialport.cpp androidserialport.h
