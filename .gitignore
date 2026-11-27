@@ -3,3 +3,5 @@ build/
 build-android/
 dist/
 aqtinstall.log
+.cache/
+build-android-container/
