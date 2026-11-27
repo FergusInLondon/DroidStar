@@ -101,7 +101,7 @@ install_system_deps() {
 
     local pkgs=(
         git cmake ninja-build gcc gcc-c++ make
-        python3 python3-pip
+        python3 python3-pip python3-devel   # devel: aqtinstall deps may build from source
         unzip curl tar findutils which
         # needed by host Qt tools from aqt
         libglvnd-devel libxkbcommon fontconfig
